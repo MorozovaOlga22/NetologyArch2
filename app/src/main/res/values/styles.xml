@@ -24,4 +24,12 @@
         <item name="android:minHeight">@dimen/icon_button_min_size</item>
     </style>
 
+    <style name="Widget.AppTheme.AdapterSeparatorTextView" parent="Widget.AppCompat.TextView">
+        <item name="android:background">#888888</item>
+        <item name="android:textColor">#CCCCCC</item>
+        <item name="android:textAlignment">center</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:padding">4sp</item>
+    </style>
+
 </resources>

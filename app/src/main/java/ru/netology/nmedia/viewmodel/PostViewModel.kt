@@ -3,16 +3,16 @@ package ru.netology.nmedia.viewmodel
 import android.net.Uri
 import androidx.core.net.toFile
 import androidx.lifecycle.*
-import androidx.paging.PagingData
-import androidx.paging.cachedIn
-import androidx.paging.map
+import androidx.paging.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import ru.netology.nmedia.auth.AppAuth
+import ru.netology.nmedia.dto.FeedItem
 import ru.netology.nmedia.dto.MediaUpload
 import ru.netology.nmedia.dto.Post
+import ru.netology.nmedia.dto.Separator
 import ru.netology.nmedia.model.FeedModelState
 import ru.netology.nmedia.model.PhotoModel
 import ru.netology.nmedia.repository.PostRepository
@@ -38,18 +38,59 @@ class PostViewModel @Inject constructor(
     private val repository: PostRepository,
     auth: AppAuth,
 ) : ViewModel() {
-    private val cached = repository
-        .data
+    val data: Flow<PagingData<FeedItem>> = auth.authStateFlow
+        .flatMapLatest { (myId, _) ->
+            repository
+                .data
+                .map { pagingData ->
+                    pagingData.map { item ->
+                        item.copy(ownedByMe = item.authorId == myId)
+                    }
+                }
+                .map { pagingData ->
+                    pagingData.insertSeparators(
+                        terminalSeparatorType = TerminalSeparatorType.SOURCE_COMPLETE,
+                        generator = { before, after ->
+                            when (getSeparatorDay(before, after)) {
+                                PostPublishedTime.NOTHING -> null
+                                PostPublishedTime.TODAY -> Separator("Сегодня")
+                                PostPublishedTime.YESTERDAY -> Separator("Вчера")
+                                PostPublishedTime.LAST_WEEK -> Separator("На прошлой неделе")
+                            }
+                        }
+                    )
+                }
+
+        }
         .cachedIn(viewModelScope)
 
-    val data: Flow<PagingData<Post>> = auth.authStateFlow
-        .flatMapLatest { (myId, _) ->
-            cached.map { pagingData ->
-                pagingData.map { post ->
-                    post.copy(ownedByMe = post.authorId == myId)
-                }
-            }
+    private fun getSeparatorDay(before: Post?, after: Post?): PostPublishedTime {
+        val currentTimeInSeconds = System.currentTimeMillis() / 1_000
+        val afterDate = getPostPublishedTime(after?.published, currentTimeInSeconds)
+        val beforeDate = getPostPublishedTime(before?.published, currentTimeInSeconds)
+        return when {
+            beforeDate != PostPublishedTime.TODAY && afterDate == PostPublishedTime.TODAY -> PostPublishedTime.TODAY
+            beforeDate != PostPublishedTime.YESTERDAY && afterDate == PostPublishedTime.YESTERDAY -> PostPublishedTime.YESTERDAY
+            beforeDate != PostPublishedTime.LAST_WEEK && afterDate == PostPublishedTime.LAST_WEEK -> PostPublishedTime.LAST_WEEK
+            else -> PostPublishedTime.NOTHING
         }
+    }
+
+    private fun getPostPublishedTime(
+        published: Long?,
+        currentTimeSeconds: Long
+    ): PostPublishedTime {
+        val secondInDay = 60 * 60 * 24
+
+        return when {
+            published == null -> PostPublishedTime.NOTHING
+            currentTimeSeconds - published <= secondInDay -> PostPublishedTime.TODAY
+            currentTimeSeconds - published <= 2 * secondInDay -> PostPublishedTime.YESTERDAY
+            else -> PostPublishedTime.LAST_WEEK
+        }
+    }
+
+    private enum class PostPublishedTime { NOTHING, TODAY, YESTERDAY, LAST_WEEK }
 
     private val _dataState = MutableLiveData<FeedModelState>()
     val dataState: LiveData<FeedModelState>

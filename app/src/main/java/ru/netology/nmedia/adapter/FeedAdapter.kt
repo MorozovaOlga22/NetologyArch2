@@ -10,7 +10,10 @@ import androidx.recyclerview.widget.RecyclerView
 import ru.netology.nmedia.BuildConfig
 import ru.netology.nmedia.R
 import ru.netology.nmedia.databinding.CardPostBinding
+import ru.netology.nmedia.databinding.SeparatorBinding
+import ru.netology.nmedia.dto.FeedItem
 import ru.netology.nmedia.dto.Post
+import ru.netology.nmedia.dto.Separator
 import ru.netology.nmedia.view.loadCircleCrop
 
 interface OnInteractionListener {
@@ -22,16 +25,38 @@ interface OnInteractionListener {
 
 class PostsAdapter(
     private val onInteractionListener: OnInteractionListener,
-) : PagingDataAdapter<Post, PostViewHolder>(PostDiffCallback()) {
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PostViewHolder {
-        val binding = CardPostBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-        return PostViewHolder(binding, onInteractionListener)
+) : PagingDataAdapter<FeedItem, RecyclerView.ViewHolder>(FeedDiffCallback()) {
+    private val typeSeparator = 0
+    private val typePost = 1
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        val layoutInflater = LayoutInflater.from(parent.context)
+        return when (viewType) {
+            typeSeparator -> SeparatorViewHolder(
+                SeparatorBinding.inflate(layoutInflater, parent, false)
+            )
+            typePost -> PostViewHolder(
+                CardPostBinding.inflate(layoutInflater, parent, false),
+                onInteractionListener
+            )
+            else -> throw IllegalArgumentException("unknown view type: $viewType")
+        }
     }
 
-    override fun onBindViewHolder(holder: PostViewHolder, position: Int) {
-        // FIXME: students will do in HW
+    override fun getItemViewType(position: Int): Int {
+        return when (getItem(position)) {
+            is Separator -> typeSeparator
+            is Post -> typePost
+            null -> throw IllegalArgumentException("unknown item type")
+        }
+    }
+
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         getItem(position)?.let {
-            holder.bind(it)
+            when (it) {
+                is Post -> (holder as? PostViewHolder)?.bind(it)
+                is Separator -> (holder as? SeparatorViewHolder)?.bind(it)
+            }
         }
     }
 }
@@ -85,12 +110,26 @@ class PostViewHolder(
     }
 }
 
-class PostDiffCallback : DiffUtil.ItemCallback<Post>() {
-    override fun areItemsTheSame(oldItem: Post, newItem: Post): Boolean {
+class SeparatorViewHolder(
+    private val binding: SeparatorBinding
+) : RecyclerView.ViewHolder(binding.root) {
+
+    fun bind(separator: Separator) {
+        binding.apply {
+            text.text = separator.text
+        }
+    }
+}
+
+class FeedDiffCallback : DiffUtil.ItemCallback<FeedItem>() {
+    override fun areItemsTheSame(oldItem: FeedItem, newItem: FeedItem): Boolean {
+        if (oldItem !is Post || newItem !is Post) {
+            return false
+        }
         return oldItem.id == newItem.id
     }
 
-    override fun areContentsTheSame(oldItem: Post, newItem: Post): Boolean {
+    override fun areContentsTheSame(oldItem: FeedItem, newItem: FeedItem): Boolean {
         return oldItem == newItem
     }
 }
